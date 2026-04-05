@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { UserPlus, Search, FileText, Printer, Download, MessageCircle } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAddPatient, useSearchPatients, useAddPrescription, usePatients } from "@/hooks/useDatabase";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const orthoAdvice: Record<string, string> = {
   "Plaster Care": "प्लास्टर केयर सलाह:\n• प्लास्टर को सूखा रखें\n• उंगलियों को हिलाते रहें\n• सूजन या सुन्नपन होने पर तुरंत डॉक्टर से मिलें\n• प्लास्टर को खुद न निकालें",
@@ -21,11 +22,67 @@ const orthoAdvice: Record<string, string> = {
   "Emergency Warning": "आपातकालीन चेतावनी:\n⚠️ तुरंत डॉक्टर से मिलें यदि:\n• उंगलियां नीली/सुन्न हो जाएं\n• असहनीय दर्द हो\n• प्लास्टर टूट जाए\n• बुखार आए\n• सूजन बहुत बढ़ जाए",
 };
 
+const CLINIC = {
+  name: "Balaji Ortho Care Center",
+  doctor: "Dr. S. S. Rathore (DMRT | BPT)",
+  address: "Opp Govt Hospital, Bay Pass Road, Khinwara, Rajasthan – 306502",
+  phone: "+91 8005707783",
+};
+
+function getSelectedPatient(allPatients: any[] | undefined, patientId: string) {
+  return allPatients?.find((p) => p.id === patientId);
+}
+
+function buildPrescriptionHTML(patient: any, rxForm: any, advice: string) {
+  const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return `
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 24px; color: #1a1a2e;">
+      <div style="text-align: center; border-bottom: 3px solid #0a2647; padding-bottom: 16px; margin-bottom: 16px;">
+        <h1 style="margin: 0; font-size: 22px; color: #0a2647;">${CLINIC.name}</h1>
+        <p style="margin: 4px 0; font-size: 14px; font-weight: 600; color: #00b4d8;">${CLINIC.doctor}</p>
+        <p style="margin: 2px 0; font-size: 12px; color: #555;">${CLINIC.address}</p>
+        <p style="margin: 2px 0; font-size: 12px; color: #555;">Phone: ${CLINIC.phone}</p>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px;">
+        <div><strong>Patient:</strong> ${patient?.name || "N/A"}</div>
+        <div><strong>Date:</strong> ${today}</div>
+      </div>
+      <div style="display: flex; gap: 16px; margin-bottom: 16px; font-size: 13px;">
+        <div><strong>Age:</strong> ${patient?.age || "N/A"}</div>
+        <div><strong>Gender:</strong> ${patient?.gender || "N/A"}</div>
+        <div><strong>Mobile:</strong> ${patient?.mobile || "N/A"}</div>
+      </div>
+      <div style="border-top: 1px solid #ddd; padding-top: 12px; margin-bottom: 12px;">
+        <h3 style="margin: 0 0 6px; font-size: 14px; color: #0a2647;">Diagnosis</h3>
+        <p style="margin: 0; font-size: 13px;">${rxForm.diagnosis || "—"}</p>
+      </div>
+      <div style="border-top: 1px solid #ddd; padding-top: 12px; margin-bottom: 12px;">
+        <h3 style="margin: 0 0 6px; font-size: 14px; color: #0a2647;">℞ Medicines</h3>
+        <pre style="margin: 0; font-size: 13px; white-space: pre-wrap; font-family: inherit;">${rxForm.medicines || "—"}</pre>
+      </div>
+      <div style="border-top: 1px solid #ddd; padding-top: 12px; margin-bottom: 12px;">
+        <h3 style="margin: 0 0 6px; font-size: 14px; color: #0a2647;">Advice</h3>
+        <pre style="margin: 0; font-size: 13px; white-space: pre-wrap; font-family: inherit;">${advice || "—"}</pre>
+      </div>
+      ${rxForm.followup_date ? `<div style="border-top: 1px solid #ddd; padding-top: 12px; margin-bottom: 12px;">
+        <h3 style="margin: 0 0 6px; font-size: 14px; color: #0a2647;">Next Visit</h3>
+        <p style="margin: 0; font-size: 13px;">${new Date(rxForm.followup_date).toLocaleDateString("en-IN")}</p>
+      </div>` : ""}
+      <div style="border-top: 2px solid #0a2647; padding-top: 16px; margin-top: 24px; text-align: right;">
+        <p style="margin: 0; font-size: 14px; font-weight: 600; color: #0a2647;">${CLINIC.doctor}</p>
+        <p style="margin: 2px 0; font-size: 11px; color: #555;">${CLINIC.name}</p>
+      </div>
+    </div>
+  `;
+}
+
 export default function OPD() {
   const [advice, setAdvice] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [regForm, setRegForm] = useState({ name: "", mobile: "", age: "", gender: "", address: "" });
   const [rxForm, setRxForm] = useState({ patient_id: "", diagnosis: "", medicines: "", followup_date: "" });
+  const [isExporting, setIsExporting] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
 
   const addPatient = useAddPatient();
   const { data: searchResults } = useSearchPatients(searchQuery);
@@ -53,11 +110,10 @@ export default function OPD() {
     }
   };
 
-  const handlePrescription = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const savePrescription = async () => {
     if (!rxForm.patient_id || !rxForm.diagnosis) {
       toast({ title: "Error", description: "Select patient and enter diagnosis", variant: "destructive" });
-      return;
+      return false;
     }
     try {
       await addPrescription.mutateAsync({
@@ -67,12 +123,160 @@ export default function OPD() {
         advice,
         followup_date: rxForm.followup_date || null,
       });
+      return true;
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+      return false;
+    }
+  };
+
+  const handlePrescription = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const saved = await savePrescription();
+    if (saved) {
       toast({ title: "Success", description: "Prescription saved!" });
       setRxForm({ patient_id: "", diagnosis: "", medicines: "", followup_date: "" });
       setAdvice("");
+    }
+  };
+
+  const getFileName = () => {
+    const patient = getSelectedPatient(allPatients, rxForm.patient_id);
+    const date = new Date().toISOString().slice(0, 10);
+    const name = (patient?.name || "Patient").replace(/\s+/g, "_");
+    return `Prescription_${name}_${date}`;
+  };
+
+  const generatePdfBlob = async (): Promise<Blob | null> => {
+    const patient = getSelectedPatient(allPatients, rxForm.patient_id);
+    const html = buildPrescriptionHTML(patient, rxForm, advice);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const blob = await html2pdf()
+        .set({
+          margin: 10,
+          filename: getFileName() + ".pdf",
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2 },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        })
+        .from(container)
+        .outputPdf("blob");
+      return blob as Blob;
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      return null;
+    } finally {
+      document.body.removeChild(container);
+    }
+  };
+
+  const handlePrint = async () => {
+    if (!rxForm.patient_id || !rxForm.diagnosis) {
+      toast({ title: "Error", description: "Select patient and enter diagnosis first", variant: "destructive" });
+      return;
+    }
+    setIsExporting(true);
+    await savePrescription();
+
+    const patient = getSelectedPatient(allPatients, rxForm.patient_id);
+    const html = buildPrescriptionHTML(patient, rxForm, advice);
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html><head><title>Prescription - ${patient?.name || "Patient"}</title>
+        <style>@media print { body { margin: 0; } }</style>
+        </head><body>${html}</body></html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+    }
+    setIsExporting(false);
+  };
+
+  const handlePdfDownload = async () => {
+    if (!rxForm.patient_id || !rxForm.diagnosis) {
+      toast({ title: "Error", description: "Select patient and enter diagnosis first", variant: "destructive" });
+      return;
+    }
+    setIsExporting(true);
+    await savePrescription();
+
+    try {
+      const blob = await generatePdfBlob();
+      if (!blob) throw new Error("PDF generation failed");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getFileName() + ".pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Success", description: "PDF downloaded!" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
+    setIsExporting(false);
+  };
+
+  const handleWhatsApp = async () => {
+    if (!rxForm.patient_id || !rxForm.diagnosis) {
+      toast({ title: "Error", description: "Select patient and enter diagnosis first", variant: "destructive" });
+      return;
+    }
+    setIsExporting(true);
+    await savePrescription();
+
+    const patient = getSelectedPatient(allPatients, rxForm.patient_id);
+
+    try {
+      // Generate PDF and upload to storage
+      const blob = await generatePdfBlob();
+      if (!blob) throw new Error("PDF generation failed");
+
+      const fileName = `${getFileName()}_${Date.now()}.pdf`;
+      const { error: uploadError } = await supabase.storage
+        .from("prescriptions")
+        .upload(fileName, blob, { contentType: "application/pdf", upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("prescriptions")
+        .getPublicUrl(fileName);
+
+      const pdfLink = urlData.publicUrl;
+
+      // Build WhatsApp message with PDF link
+      const msg = [
+        `📋 *Prescription from ${CLINIC.name}*`,
+        `👨‍⚕️ ${CLINIC.doctor}`,
+        ``,
+        `👤 Patient: ${patient?.name || "N/A"}`,
+        `🩺 Diagnosis: ${rxForm.diagnosis}`,
+        rxForm.followup_date ? `📅 Next Visit: ${new Date(rxForm.followup_date).toLocaleDateString("en-IN")}` : "",
+        ``,
+        `📥 Download Prescription PDF:`,
+        pdfLink,
+        ``,
+        `📞 Contact: ${CLINIC.phone}`,
+        `📍 ${CLINIC.address}`,
+      ].filter(Boolean).join("\n");
+
+      const whatsappUrl = patient?.mobile
+        ? `https://wa.me/91${patient.mobile.replace(/\D/g, "").replace(/^91/, "")}?text=${encodeURIComponent(msg)}`
+        : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+
+      window.open(whatsappUrl, "_blank");
+      toast({ title: "Success", description: "WhatsApp share opened with PDF link!" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setIsExporting(false);
   };
 
   return (
@@ -214,9 +418,15 @@ export default function OPD() {
                       <Button type="submit" disabled={addPrescription.isPending}>
                         {addPrescription.isPending ? "Saving..." : "Save Prescription"}
                       </Button>
-                      <Button type="button" variant="outline" className="gap-2"><Printer className="h-4 w-4" />Print</Button>
-                      <Button type="button" variant="outline" className="gap-2"><Download className="h-4 w-4" />PDF</Button>
-                      <Button type="button" variant="outline" className="gap-2 text-success"><MessageCircle className="h-4 w-4" />WhatsApp</Button>
+                      <Button type="button" variant="outline" className="gap-2" onClick={handlePrint} disabled={isExporting}>
+                        <Printer className="h-4 w-4" />Print
+                      </Button>
+                      <Button type="button" variant="outline" className="gap-2" onClick={handlePdfDownload} disabled={isExporting}>
+                        <Download className="h-4 w-4" />PDF
+                      </Button>
+                      <Button type="button" variant="outline" className="gap-2 text-success" onClick={handleWhatsApp} disabled={isExporting}>
+                        <MessageCircle className="h-4 w-4" />WhatsApp
+                      </Button>
                     </div>
                   </form>
                 </CardContent>
