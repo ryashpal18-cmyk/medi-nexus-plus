@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/sidebar";
 
 const menuItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "OPD", url: "/opd", icon: Stethoscope },
   { title: "IPD / Beds", url: "/ipd", icon: BedDouble },
   { title: "Appointments", url: "/appointments", icon: Calendar },
