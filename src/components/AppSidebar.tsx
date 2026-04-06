@@ -27,6 +27,14 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("userName");
+    navigate("/login");
+  };
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
