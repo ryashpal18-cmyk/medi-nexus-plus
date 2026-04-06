@@ -22,7 +22,7 @@ function getWhatsAppLink(patient: string, amount: number) {
   return `https://wa.me/918005707783?text=${encodeURIComponent(msg)}`;
 }
 
-function buildInvoiceHTML(bill: any, index: number) {
+function buildInvoiceHTML(bill: any, index: number, logoUrl: string = "/images/logo.png") {
   const patientName = (bill.patients as any)?.name || "Patient";
   const invoiceNo = `INV-${bill.id.slice(0, 8).toUpperCase()}`;
   const date = new Date(bill.created_at).toLocaleDateString("en-IN", {
