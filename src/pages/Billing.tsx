@@ -58,7 +58,7 @@ function buildInvoiceHTML(bill: any, index: number, logoUrl: string = "/images/l
         <!-- Header -->
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <img src="/images/logo.png" style="width:50px;height:50px;object-fit:contain;" alt="Logo" />
+            <img src="${logoUrl}" style="width:50px;height:50px;object-fit:contain;" alt="Logo" />
             <div>
               <div style="font-size:17px;font-weight:800;color:#1e3a5f;letter-spacing:-0.3px;">Balaji Ortho Care Center</div>
               <div style="font-size:10px;color:#475569;margin-top:2px;">Dr. S. S. Rathore (DMRT | BPT)</div>
