@@ -5,11 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Receipt, Plus, MessageCircle, Printer, Trash2 } from "lucide-react";
+import { Receipt, Plus, MessageCircle, Printer, Trash2, Pencil, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBills, useAddBill, usePatients, useUpdateBill } from "@/hooks/useDatabase";
 import { useState } from "react";
 import { toast } from "@/hooks/use-toast";
+import * as XLSX from "xlsx";
 
 const statusStyle: Record<string, string> = {
   Paid: "bg-success/10 text-success",
@@ -37,9 +38,18 @@ interface ServiceItem {
   amount: string;
 }
 
-function getWhatsAppLink(patient: string, amount: number) {
+function getWhatsAppBillLink(patient: string, mobile: string, amount: number, services: string, status: string) {
+  const msg = `Namaste ${patient},\n\nBalaji Ortho Care Center\nDr. S. S. Rathore (DMRT | BPT)\n\n📋 Bill Details:\n${services}\n\n💰 Total: ₹${amount.toLocaleString()}\n📌 Status: ${status}\n\nDhanyawad!\n📞 +91 8005707783`;
+  const cleanMobile = mobile?.replace(/\D/g, "") || "";
+  const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
+  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+}
+
+function getWhatsAppReminderLink(patient: string, mobile: string, amount: number) {
   const msg = `Namaste ${patient}, Balaji Ortho Care Center se nivedan hai ki aapka Rs. ${amount} pending hai. Kripya clinic par jama karein. Dhanyawad!`;
-  return `https://wa.me/918005707783?text=${encodeURIComponent(msg)}`;
+  const cleanMobile = mobile?.replace(/\D/g, "") || "";
+  const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
+  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
 }
 
 function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
@@ -49,7 +59,6 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
     day: "2-digit", month: "short", year: "numeric",
   });
 
-  // Parse services - stored as "Service1, Service2" in service field
   const services = bill.service.split("|").map((s: string) => {
     const parts = s.trim().split(":");
     return { name: parts[0]?.trim() || s.trim(), amount: parts[1] ? Number(parts[1].trim()) : Number(bill.amount) };
@@ -87,7 +96,6 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
       </svg>
 
       <div style="position:relative;z-index:1;padding:12px 16px 10px;">
-        <!-- Header -->
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
           <div style="display:flex;align-items:center;gap:8px;">
             <img src="${logoUrl}" style="width:40px;height:40px;object-fit:contain;" alt="Logo" />
@@ -107,7 +115,6 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
 
         <div style="height:1.5px;background:linear-gradient(90deg,#0891b2,#1e3a5f);border-radius:2px;margin-bottom:8px;"></div>
 
-        <!-- Patient info -->
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
           <div>
             <div style="font-size:7px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Bill To</div>
@@ -119,7 +126,6 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
           </div>
         </div>
 
-        <!-- Table -->
         <table style="width:100%;border-collapse:collapse;margin-bottom:6px;font-size:10px;">
           <thead>
             <tr style="background:#f0f9ff;">
@@ -139,7 +145,6 @@ function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
           </tfoot>
         </table>
 
-        <!-- Footer -->
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e2e8f0;padding-top:5px;">
           <span style="font-size:7px;color:#94a3b8;">Medix Medical Invoice</span>
           <div style="font-size:7px;color:#94a3b8;">Thank you for choosing Balaji Ortho Care Center</div>
@@ -196,12 +201,28 @@ function printInvoice(bill: any) {
   win.document.close();
 }
 
+function sendBillWhatsApp(bill: any) {
+  const patient = (bill.patients as any);
+  const mobile = patient?.mobile || "";
+  const name = patient?.name || "Patient";
+  if (!mobile) {
+    return null;
+  }
+  const serviceList = bill.service.split("|").map((s: string) => {
+    const parts = s.trim().split(":");
+    return `• ${parts[0]?.trim()}: ₹${parts[1]?.trim() || bill.amount}`;
+  }).join("\n");
+  return getWhatsAppBillLink(name, mobile, Number(bill.amount), serviceList, bill.status);
+}
+
 export default function Billing() {
   const { data: bills, isLoading } = useBills();
   const { data: patients } = usePatients();
   const addBill = useAddBill();
   const updateBill = useUpdateBill();
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingBill, setEditingBill] = useState<any>(null);
   const [selectedPatient, setSelectedPatient] = useState("");
   const [services, setServices] = useState<ServiceItem[]>([{ name: "", amount: "" }]);
 
@@ -221,14 +242,20 @@ export default function Billing() {
       return;
     }
     try {
-      // Store as "Service1:Amount1|Service2:Amount2"
       const serviceStr = validServices.map(s => `${s.name}:${s.amount}`).join("|");
-      await addBill.mutateAsync({
+      const result = await addBill.mutateAsync({
         patient_id: selectedPatient,
         service: serviceStr,
         amount: totalAmount,
       });
       toast({ title: "Success", description: "Bill created!" });
+
+      // Auto-send WhatsApp
+      const whatsappUrl = sendBillWhatsApp(result);
+      if (whatsappUrl) {
+        window.open(whatsappUrl, "_blank");
+      }
+
       setSelectedPatient("");
       setServices([{ name: "", amount: "" }]);
       setOpen(false);
@@ -237,76 +264,166 @@ export default function Billing() {
     }
   };
 
+  const handleEdit = (bill: any) => {
+    setEditingBill(bill);
+    // Parse services from stored format
+    const parsedServices = bill.service.split("|").map((s: string) => {
+      const parts = s.trim().split(":");
+      return { name: parts[0]?.trim() || "", amount: parts[1]?.trim() || String(bill.amount) };
+    });
+    setServices(parsedServices);
+    setEditOpen(true);
+  };
+
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBill) return;
+    const validServices = services.filter(s => s.name && s.amount);
+    if (validServices.length === 0) {
+      toast({ title: "Error", description: "कम से कम एक service ज़रूरी है", variant: "destructive" });
+      return;
+    }
+    try {
+      const serviceStr = validServices.map(s => `${s.name}:${s.amount}`).join("|");
+      const newTotal = validServices.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+      await updateBill.mutateAsync({
+        id: editingBill.id,
+        service: serviceStr,
+        amount: newTotal,
+      });
+      toast({ title: "Success", description: "Bill updated!" });
+      setEditOpen(false);
+      setEditingBill(null);
+      setServices([{ name: "", amount: "" }]);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const exportToExcel = () => {
+    if (!bills || bills.length === 0) {
+      toast({ title: "No data", description: "कोई bill data नहीं है export करने के लिए", variant: "destructive" });
+      return;
+    }
+    const data = bills.map((bill) => {
+      const patient = bill.patients as any;
+      const displayService = bill.service.includes("|")
+        ? bill.service.split("|").map((s: string) => s.split(":")[0].trim()).join(", ")
+        : bill.service;
+      return {
+        "Patient Name": patient?.name || "",
+        "Age": "",
+        "Mobile": patient?.mobile || "",
+        "Village/Address": patient?.address || "",
+        "Service": displayService,
+        "Amount (₹)": Number(bill.amount),
+        "Status": bill.status,
+        "Date": new Date(bill.created_at).toLocaleDateString("en-IN"),
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Patient Bills");
+    XLSX.writeFile(wb, `Patient_Bills_${new Date().toISOString().split("T")[0]}.xlsx`);
+    toast({ title: "Exported!", description: "Excel file download हो गई" });
+  };
+
+  const renderServiceForm = () => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>Services</Label>
+        <Button type="button" variant="outline" size="sm" onClick={addServiceRow} className="h-7 text-xs gap-1">
+          <Plus className="h-3 w-3" /> Add Service
+        </Button>
+      </div>
+      <div className="space-y-2 max-h-48 overflow-y-auto">
+        {services.map((s, idx) => (
+          <div key={idx} className="flex gap-2 items-center">
+            <Select value={s.name} onValueChange={v => updateService(idx, "name", v)}>
+              <SelectTrigger className="flex-1 h-9"><SelectValue placeholder="Service" /></SelectTrigger>
+              <SelectContent>
+                {SERVICE_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              placeholder="₹"
+              className="w-24 h-9"
+              value={s.amount}
+              onChange={e => updateService(idx, "amount", e.target.value)}
+            />
+            {services.length > 1 && (
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeServiceRow(idx)}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h1 className="module-header">Billing</h1>
             <p className="text-sm text-muted-foreground">Manage invoices, receipts, and payments</p>
           </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2"><Plus className="h-4 w-4" />New Bill</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle className="font-heading">New Bill</DialogTitle></DialogHeader>
-              <form onSubmit={handleAdd} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Patient</Label>
-                  <Select value={selectedPatient} onValueChange={setSelectedPatient}>
-                    <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
-                    <SelectContent>
-                      {patients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Services</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={addServiceRow} className="h-7 text-xs gap-1">
-                      <Plus className="h-3 w-3" /> Add Service
-                    </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" className="gap-2" onClick={exportToExcel}>
+              <Download className="h-4 w-4" /> Excel Export
+            </Button>
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2"><Plus className="h-4 w-4" />New Bill</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader><DialogTitle className="font-heading">New Bill</DialogTitle></DialogHeader>
+                <form onSubmit={handleAdd} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Patient</Label>
+                    <Select value={selectedPatient} onValueChange={setSelectedPatient}>
+                      <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
+                      <SelectContent>
+                        {patients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
-                    {services.map((s, idx) => (
-                      <div key={idx} className="flex gap-2 items-center">
-                        <Select value={s.name} onValueChange={v => updateService(idx, "name", v)}>
-                          <SelectTrigger className="flex-1 h-9"><SelectValue placeholder="Service" /></SelectTrigger>
-                          <SelectContent>
-                            {SERVICE_OPTIONS.map(opt => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="number"
-                          placeholder="₹"
-                          className="w-24 h-9"
-                          value={s.amount}
-                          onChange={e => updateService(idx, "amount", e.target.value)}
-                        />
-                        {services.length > 1 && (
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeServiceRow(idx)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                  {renderServiceForm()}
+                  <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                    <span className="text-sm font-medium">Total Amount</span>
+                    <span className="text-lg font-bold text-primary">₹{totalAmount.toLocaleString()}</span>
                   </div>
-                </div>
-
-                <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                  <span className="text-sm font-medium">Total Amount</span>
-                  <span className="text-lg font-bold text-primary">₹{totalAmount.toLocaleString()}</span>
-                </div>
-
-                <Button type="submit" className="w-full" disabled={addBill.isPending}>
-                  {addBill.isPending ? "Creating..." : "Create Bill"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <Button type="submit" className="w-full" disabled={addBill.isPending}>
+                    {addBill.isPending ? "Creating..." : "Create Bill & Send WhatsApp"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
+
+        {/* Edit Bill Dialog */}
+        <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) { setEditingBill(null); setServices([{ name: "", amount: "" }]); } }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle className="font-heading">Edit Bill</DialogTitle></DialogHeader>
+            <form onSubmit={handleEditSave} className="space-y-4">
+              <div className="p-3 bg-muted/50 rounded-lg">
+                <p className="text-sm font-medium">Patient: <span className="text-primary">{(editingBill?.patients as any)?.name}</span></p>
+              </div>
+              {renderServiceForm()}
+              <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                <span className="text-sm font-medium">Total Amount</span>
+                <span className="text-lg font-bold text-primary">₹{totalAmount.toLocaleString()}</span>
+              </div>
+              <Button type="submit" className="w-full" disabled={updateBill.isPending}>
+                {updateBill.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <Card>
           <CardHeader>
@@ -332,12 +449,13 @@ export default function Billing() {
                   </thead>
                   <tbody>
                     {bills?.map(bill => {
+                      const patient = bill.patients as any;
                       const displayService = bill.service.includes("|")
-                        ? bill.service.split("|").map(s => s.split(":")[0].trim()).join(", ")
+                        ? bill.service.split("|").map((s: string) => s.split(":")[0].trim()).join(", ")
                         : bill.service;
                       return (
                         <tr key={bill.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="py-3 font-medium">{(bill.patients as any)?.name}</td>
+                          <td className="py-3 font-medium">{patient?.name}</td>
                           <td className="py-3 hidden sm:table-cell text-muted-foreground text-xs">{displayService}</td>
                           <td className="py-3 text-right font-medium">₹{Number(bill.amount).toLocaleString()}</td>
                           <td className="py-3 text-center">
@@ -354,11 +472,14 @@ export default function Billing() {
                           </td>
                           <td className="py-3 text-right">
                             <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(bill)} title="Edit Bill">
+                                <Pencil className="h-3 w-3" />
+                              </Button>
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => printInvoice(bill)}>
                                 <Printer className="h-3 w-3" />
                               </Button>
-                              {bill.status !== "Paid" && (
-                                <a href={getWhatsAppLink((bill.patients as any)?.name || "", Number(bill.amount))} target="_blank" rel="noopener noreferrer">
+                              {bill.status !== "Paid" && patient?.mobile && (
+                                <a href={getWhatsAppReminderLink(patient?.name || "", patient?.mobile || "", Number(bill.amount))} target="_blank" rel="noopener noreferrer">
                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-success"><MessageCircle className="h-3 w-3" /></Button>
                                 </a>
                               )}

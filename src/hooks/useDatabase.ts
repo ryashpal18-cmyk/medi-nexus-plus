@@ -150,7 +150,7 @@ export function useBills() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("billing")
-        .select("*, patients(name, mobile)")
+        .select("*, patients(name, mobile, address)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -162,7 +162,7 @@ export function useAddBill() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (b: BillingInsert) => {
-      const { data, error } = await supabase.from("billing").insert(b).select().single();
+      const { data, error } = await supabase.from("billing").insert(b).select("*, patients(name, mobile, address)").single();
       if (error) throw error;
       return data;
     },
@@ -179,6 +179,22 @@ export function useUpdateBill() {
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["billing"] }),
+  });
+}
+
+// ─── Pending Due Bills ───
+export function usePendingBills() {
+  return useQuery({
+    queryKey: ["billing", "pending"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("billing")
+        .select("*, patients(name, mobile, address)")
+        .in("status", ["Pending", "Partial"])
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
   });
 }
 
