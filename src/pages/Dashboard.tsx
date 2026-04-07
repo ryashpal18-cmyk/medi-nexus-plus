@@ -2,12 +2,12 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatCard } from "@/components/StatCard";
 import {
   Users, Calendar, Receipt, FileText, Activity, AlertTriangle,
-  Stethoscope, BedDouble, TrendingUp, Clock, IndianRupee
+  Stethoscope, BedDouble, TrendingUp, Clock, IndianRupee, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useDashboardStats, useTodayAppointments, usePrescriptions, usePhysioSessions, useTodayBills } from "@/hooks/useDatabase";
+import { useDashboardStats, useTodayAppointments, usePrescriptions, usePhysioSessions, useTodayBills, usePendingBills } from "@/hooks/useDatabase";
 import { useNavigate } from "react-router-dom";
 
 const statusColors: Record<string, string> = {
@@ -25,18 +25,23 @@ export default function Dashboard() {
   const { data: prescriptions } = usePrescriptions();
   const { data: physio } = usePhysioSessions();
   const { data: todayBills } = useTodayBills();
+  const { data: pendingBills } = usePendingBills();
 
   const todayTotalAmount = todayBills?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
+  const pendingTotal = pendingBills?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="module-header">Dashboard</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Welcome back, Dr. Rathore · {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </p>
+          <div className="flex items-center gap-3">
+            <img src="/images/logo.png" alt="Logo" className="h-10 w-10 object-contain" />
+            <div>
+              <h1 className="module-header">Dashboard</h1>
+              <p className="text-muted-foreground text-sm mt-1">
+                Welcome back, Dr. Rathore · {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
+            </div>
           </div>
           <Button className="emergency-btn gap-2 w-fit" onClick={() => navigate("/ipd")}>
             <AlertTriangle className="h-4 w-4" />
@@ -154,6 +159,64 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Pending Due Section */}
+        {pendingBills && pendingBills.length > 0 && (
+          <Card className="border-warning/30">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-heading flex items-center gap-2 text-warning">
+                  <AlertTriangle className="h-4 w-4" />
+                  Pending Dues ({pendingBills.length} patients) — ₹{pendingTotal.toLocaleString()}
+                </CardTitle>
+                <Button variant="ghost" size="sm" className="text-primary text-xs" onClick={() => navigate("/billing")}>View All</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-muted-foreground text-xs">
+                      <th className="text-left py-2 font-medium">Patient</th>
+                      <th className="text-left py-2 font-medium hidden sm:table-cell">Mobile</th>
+                      <th className="text-right py-2 font-medium">Due Amount</th>
+                      <th className="text-center py-2 font-medium">Status</th>
+                      <th className="text-right py-2 font-medium">Remind</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingBills.slice(0, 10).map(bill => {
+                      const patient = bill.patients as any;
+                      const mobile = patient?.mobile || "";
+                      const cleanMobile = mobile.replace(/\D/g, "");
+                      const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
+                      const reminderUrl = mobile ? `https://wa.me/${num}?text=${encodeURIComponent(`Namaste ${patient?.name}, Balaji Ortho Care Center se aapka Rs. ${Number(bill.amount).toLocaleString()} pending hai. Kripya jama karein. Dhanyawad!`)}` : "";
+                      return (
+                        <tr key={bill.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2 font-medium">{patient?.name}</td>
+                          <td className="py-2 hidden sm:table-cell text-muted-foreground text-xs">{mobile}</td>
+                          <td className="py-2 text-right font-bold text-warning">₹{Number(bill.amount).toLocaleString()}</td>
+                          <td className="py-2 text-center">
+                            <Badge variant="secondary" className="text-[10px] border-0 bg-warning/10 text-warning">{bill.status}</Badge>
+                          </td>
+                          <td className="py-2 text-right">
+                            {mobile && (
+                              <a href={reminderUrl} target="_blank" rel="noopener noreferrer">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-success">
+                                  <MessageCircle className="h-3 w-3" />
+                                </Button>
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid lg:grid-cols-2 gap-6">
           <Card>
