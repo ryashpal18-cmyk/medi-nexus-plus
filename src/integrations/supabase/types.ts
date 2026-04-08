@@ -96,30 +96,36 @@ export type Database = {
       billing: {
         Row: {
           amount: number
+          amount_paid: number
           created_at: string
           id: string
           invoice_pdf_url: string | null
           patient_id: string
+          payment_mode: string | null
           service: string
           status: string
           updated_at: string
         }
         Insert: {
           amount?: number
+          amount_paid?: number
           created_at?: string
           id?: string
           invoice_pdf_url?: string | null
           patient_id: string
+          payment_mode?: string | null
           service: string
           status?: string
           updated_at?: string
         }
         Update: {
           amount?: number
+          amount_paid?: number
           created_at?: string
           id?: string
           invoice_pdf_url?: string | null
           patient_id?: string
+          payment_mode?: string | null
           service?: string
           status?: string
           updated_at?: string
