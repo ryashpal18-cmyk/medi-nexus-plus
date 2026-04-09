@@ -316,8 +316,8 @@ export default function Billing() {
       const displayServices = validServices.map(s => `• ${s.name}: ₹${s.amount}`).join("\n");
 
       if (mobile) {
-        const waUrl = getWhatsAppBillLink(patientName, mobile, totalAmount, displayServices, status, pdfUrl || undefined);
-        window.open(waUrl, "_blank");
+        const msg = getWhatsAppBillMessage(patientName, mobile, totalAmount, displayServices, status, pdfUrl || undefined);
+        openWhatsAppWeb(mobile, msg);
         toast({ title: "✅ WhatsApp Opened", description: "Invoice PDF link के साथ WhatsApp share opened" });
       } else {
         toast({ title: "⚠️ No Mobile", description: "Patient का mobile number नहीं है", variant: "destructive" });
