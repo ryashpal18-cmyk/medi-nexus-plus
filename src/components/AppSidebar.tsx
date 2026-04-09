@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, BedDouble, Calendar, Receipt,
-  Activity, FileText, BarChart3, Settings, Stethoscope, LogOut
+  Activity, FileText, BarChart3, Settings, Stethoscope, LogOut, MessageCircle
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -20,6 +20,7 @@ const menuItems = [
   { title: "Physiotherapy", url: "/physiotherapy", icon: Activity },
   { title: "Reports / X-Ray", url: "/reports", icon: FileText },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
+  { title: "WhatsApp", url: "/whatsapp", icon: MessageCircle },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

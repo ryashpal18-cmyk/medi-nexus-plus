@@ -13,6 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
 import html2pdf from "html2pdf.js";
+import { openWhatsAppWeb } from "@/pages/WhatsApp";
 
 const statusStyle: Record<string, string> = {
   Paid: "bg-success/10 text-success",
@@ -40,18 +41,12 @@ interface ServiceItem {
   amount: string;
 }
 
-function getWhatsAppBillLink(patient: string, mobile: string, amount: number, services: string, status: string, pdfUrl?: string) {
-  const msg = `🙏 Namaste ${patient},\n\nBalaji Ortho Care Center\nDr. S. S. Rathore (DMRT | BPT)\n\n📋 Bill Details:\n${services}\n\n💰 Total: ₹${amount.toLocaleString()}\n📌 Status: ${status}${pdfUrl ? `\n\n📥 Download Invoice PDF:\n${pdfUrl}` : ""}\n\n🌐 View reports & book appointment online:\nhttps://balaji-health-hub.lovable.app/\n\n📞 Contact: +91 8005707783\nDhanyawad! 🙏`;
-  const cleanMobile = mobile?.replace(/\D/g, "") || "";
-  const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
-  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+function getWhatsAppBillMessage(patient: string, mobile: string, amount: number, services: string, status: string, pdfUrl?: string) {
+  return `🙏 Namaste ${patient},\n\nBalaji Ortho Care Center\nDr. S. S. Rathore (DMRT | BPT)\n\n📋 Bill Details:\n${services}\n\n💰 Total: ₹${amount.toLocaleString()}\n📌 Status: ${status}${pdfUrl ? `\n\n📥 Download Invoice PDF:\n${pdfUrl}` : ""}\n\n🌐 View reports & book appointment online:\nhttps://balaji-health-hub.lovable.app/\n\n📞 Contact: +91 8005707783\nDhanyawad! 🙏`;
 }
 
-function getWhatsAppReminderLink(patient: string, mobile: string, amount: number) {
-  const msg = `Namaste ${patient}, Balaji Ortho Care Center se nivedan hai ki aapka Rs. ${amount} pending hai. Kripya clinic par jama karein. Dhanyawad!`;
-  const cleanMobile = mobile?.replace(/\D/g, "") || "";
-  const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
-  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+function getWhatsAppReminderMessage(patient: string, mobile: string, amount: number) {
+  return `Namaste ${patient}, Balaji Ortho Care Center se nivedan hai ki aapka Rs. ${amount} pending hai. Kripya clinic par jama karein. Dhanyawad!`;
 }
 
 function buildInvoiceHTML(bill: any, logoUrl: string = "/images/logo.png") {
@@ -321,8 +316,8 @@ export default function Billing() {
       const displayServices = validServices.map(s => `• ${s.name}: ₹${s.amount}`).join("\n");
 
       if (mobile) {
-        const waUrl = getWhatsAppBillLink(patientName, mobile, totalAmount, displayServices, status, pdfUrl || undefined);
-        window.open(waUrl, "_blank");
+        const msg = getWhatsAppBillMessage(patientName, mobile, totalAmount, displayServices, status, pdfUrl || undefined);
+        openWhatsAppWeb(mobile, msg);
         toast({ title: "✅ WhatsApp Opened", description: "Invoice PDF link के साथ WhatsApp share opened" });
       } else {
         toast({ title: "⚠️ No Mobile", description: "Patient का mobile number नहीं है", variant: "destructive" });
@@ -360,8 +355,8 @@ export default function Billing() {
       return `• ${parts[0]?.trim()}: ₹${parts[1]?.trim() || bill.amount}`;
     }).join("\n");
 
-    const waUrl = getWhatsAppBillLink(patientName, mobile, Number(bill.amount), displayServices, bill.status, pdfUrl || undefined);
-    window.open(waUrl, "_blank");
+    const msg = getWhatsAppBillMessage(patientName, mobile, Number(bill.amount), displayServices, bill.status, pdfUrl || undefined);
+    openWhatsAppWeb(mobile, msg);
   };
 
   const handleEdit = (bill: any) => {
@@ -408,8 +403,8 @@ export default function Billing() {
 
       if (mobile) {
         const displayServices = validServices.map(s => `• ${s.name}: ₹${s.amount}`).join("\n");
-        const waUrl = getWhatsAppBillLink(patientName, mobile, newTotal, displayServices, status, pdfUrl || undefined);
-        window.open(waUrl, "_blank");
+        const msg = getWhatsAppBillMessage(patientName, mobile, newTotal, displayServices, status, pdfUrl || undefined);
+        openWhatsAppWeb(mobile, msg);
       }
 
       toast({ title: "Success", description: "Bill updated & WhatsApp sent!" });
@@ -642,9 +637,12 @@ export default function Billing() {
                                 <MessageCircle className="h-3 w-3" />
                               </Button>
                               {bill.status !== "Paid" && patient?.mobile && (
-                                <a href={getWhatsAppReminderLink(patient?.name || "", patient?.mobile || "", Number(bill.amount) - paid)} target="_blank" rel="noopener noreferrer">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-warning" title="Payment Reminder"><Send className="h-3 w-3" /></Button>
-                                </a>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-warning" title="Payment Reminder" onClick={() => {
+                                  const msg = getWhatsAppReminderMessage(patient?.name || "", patient?.mobile || "", Number(bill.amount) - paid);
+                                  openWhatsAppWeb(patient?.mobile || "", msg);
+                                }}>
+                                  <Send className="h-3 w-3" />
+                                </Button>
                               )}
                             </div>
                           </td>
