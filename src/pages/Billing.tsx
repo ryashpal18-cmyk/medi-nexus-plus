@@ -355,8 +355,8 @@ export default function Billing() {
       return `• ${parts[0]?.trim()}: ₹${parts[1]?.trim() || bill.amount}`;
     }).join("\n");
 
-    const waUrl = getWhatsAppBillLink(patientName, mobile, Number(bill.amount), displayServices, bill.status, pdfUrl || undefined);
-    window.open(waUrl, "_blank");
+    const msg = getWhatsAppBillMessage(patientName, mobile, Number(bill.amount), displayServices, bill.status, pdfUrl || undefined);
+    openWhatsAppWeb(mobile, msg);
   };
 
   const handleEdit = (bill: any) => {
