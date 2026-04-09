@@ -403,8 +403,8 @@ export default function Billing() {
 
       if (mobile) {
         const displayServices = validServices.map(s => `• ${s.name}: ₹${s.amount}`).join("\n");
-        const waUrl = getWhatsAppBillLink(patientName, mobile, newTotal, displayServices, status, pdfUrl || undefined);
-        window.open(waUrl, "_blank");
+        const msg = getWhatsAppBillMessage(patientName, mobile, newTotal, displayServices, status, pdfUrl || undefined);
+        openWhatsAppWeb(mobile, msg);
       }
 
       toast({ title: "Success", description: "Bill updated & WhatsApp sent!" });
