@@ -7,12 +7,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { UserPlus, Search, FileText, Printer, Download, MessageCircle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { UserPlus, Search, FileText, Printer, Download, MessageCircle, Trash2 } from "lucide-react";
 import { useState, useRef } from "react";
-import { useAddPatient, useSearchPatients, useAddPrescription, usePatients } from "@/hooks/useDatabase";
+import { useAddPatient, useSearchPatients, useAddPrescription, usePatients, useDeletePatient } from "@/hooks/useDatabase";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { openWhatsAppWeb } from "@/pages/WhatsApp";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 const orthoAdvice: Record<string, string> = {
   "Plaster Care": "प्लास्टर केयर सलाह:\n• प्लास्टर को सूखा रखें\n• उंगलियों को हिलाते रहें\n• सूजन या सुन्नपन होने पर तुरंत डॉक्टर से मिलें\n• प्लास्टर को खुद न निकालें",
@@ -86,9 +88,20 @@ export default function OPD() {
   const printRef = useRef<HTMLDivElement>(null);
 
   const addPatient = useAddPatient();
+  const deletePatient = useDeletePatient();
+  const { isAdmin } = useIsAdmin();
   const { data: searchResults } = useSearchPatients(searchQuery);
   const { data: allPatients } = usePatients();
   const addPrescription = useAddPrescription();
+
+  const handleDeletePatient = async (patient: any) => {
+    try {
+      await deletePatient.mutateAsync({ id: patient.id, logData: patient });
+      toast({ title: "🗑️ Patient Deleted", description: `${patient.name} और सभी related records delete हो गए`, duration: 10000 });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,7 +382,32 @@ export default function OPD() {
                           <p className="font-medium text-sm">{p.name}</p>
                           <p className="text-xs text-muted-foreground">{p.mobile} · {p.age}y · {p.gender}</p>
                         </div>
-                        <Badge variant="outline" className="text-xs">{p.address}</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">{p.address}</Badge>
+                          {isAdmin && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete Patient">
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you sure you want to delete this patient record?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {p.name} की सभी records (appointments, bills, prescriptions, x-rays) permanently delete हो जाएँगी।
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleDeletePatient(p)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                    Delete Patient
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

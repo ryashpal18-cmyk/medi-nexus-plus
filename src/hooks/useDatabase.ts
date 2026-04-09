@@ -343,3 +343,80 @@ export function useDashboardStats() {
     },
   });
 }
+
+// ─── Delete Bill ───
+export function useDeleteBill() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, logData }: { id: string; logData?: any }) => {
+      // Log for recovery
+      if (logData) {
+        const { data: { user } } = await supabase.auth.getUser();
+        await supabase.from("deleted_records_log" as any).insert({
+          table_name: "billing",
+          record_id: id,
+          record_data: logData,
+          deleted_by: user?.id,
+        } as any);
+      }
+      // Delete related payments first
+      await supabase.from("payments").delete().eq("billing_id", id);
+      // Delete the bill
+      const { error } = await supabase.from("billing").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// ─── Delete Patient ───
+export function useDeletePatient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, logData }: { id: string; logData?: any }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (logData) {
+        await supabase.from("deleted_records_log" as any).insert({
+          table_name: "patients",
+          record_id: id,
+          record_data: logData,
+          deleted_by: user?.id,
+        } as any);
+      }
+      // Delete related records
+      await supabase.from("appointments").delete().eq("patient_id", id);
+      await supabase.from("prescriptions").delete().eq("patient_id", id);
+      await supabase.from("billing").delete().eq("patient_id", id);
+      await supabase.from("physiotherapy_sessions").delete().eq("patient_id", id);
+      await supabase.from("xray_reports").delete().eq("patient_id", id);
+      await supabase.from("medical_history").delete().eq("patient_id", id);
+      // Delete patient
+      const { error } = await supabase.from("patients").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
+
+// ─── Restore Deleted Record ───
+export function useRestoreRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ tableName, recordData }: { tableName: string; recordData: any }) => {
+      const { error } = await supabase.from(tableName as any).insert(recordData as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["patients"] });
+      qc.invalidateQueries({ queryKey: ["bills"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
