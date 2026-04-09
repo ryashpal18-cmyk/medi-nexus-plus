@@ -41,11 +41,8 @@ interface ServiceItem {
   amount: string;
 }
 
-function getWhatsAppBillLink(patient: string, mobile: string, amount: number, services: string, status: string, pdfUrl?: string) {
-  const msg = `🙏 Namaste ${patient},\n\nBalaji Ortho Care Center\nDr. S. S. Rathore (DMRT | BPT)\n\n📋 Bill Details:\n${services}\n\n💰 Total: ₹${amount.toLocaleString()}\n📌 Status: ${status}${pdfUrl ? `\n\n📥 Download Invoice PDF:\n${pdfUrl}` : ""}\n\n🌐 View reports & book appointment online:\nhttps://balaji-health-hub.lovable.app/\n\n📞 Contact: +91 8005707783\nDhanyawad! 🙏`;
-  const cleanMobile = mobile?.replace(/\D/g, "") || "";
-  const num = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
-  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+function getWhatsAppBillMessage(patient: string, mobile: string, amount: number, services: string, status: string, pdfUrl?: string) {
+  return `🙏 Namaste ${patient},\n\nBalaji Ortho Care Center\nDr. S. S. Rathore (DMRT | BPT)\n\n📋 Bill Details:\n${services}\n\n💰 Total: ₹${amount.toLocaleString()}\n📌 Status: ${status}${pdfUrl ? `\n\n📥 Download Invoice PDF:\n${pdfUrl}` : ""}\n\n🌐 View reports & book appointment online:\nhttps://balaji-health-hub.lovable.app/\n\n📞 Contact: +91 8005707783\nDhanyawad! 🙏`;
 }
 
 function getWhatsAppReminderLink(patient: string, mobile: string, amount: number) {
