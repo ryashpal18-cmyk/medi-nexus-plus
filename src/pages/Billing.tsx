@@ -586,11 +586,18 @@ export default function Billing() {
                 <DialogHeader><DialogTitle className="font-heading">New Bill</DialogTitle></DialogHeader>
                 <form onSubmit={handleAdd} className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Patient</Label>
+                    <Label>Patient (Search by name or mobile)</Label>
+                    <Input
+                      placeholder="🔍 Type name or mobile number..."
+                      value={patientSearch}
+                      onChange={e => setPatientSearch(e.target.value)}
+                      className="mb-2"
+                    />
                     <Select value={selectedPatient} onValueChange={setSelectedPatient}>
                       <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
                       <SelectContent>
-                        {patients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.mobile ? `(${p.mobile})` : ""}</SelectItem>)}
+                        {filteredPatients?.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.mobile || "No mobile"})</SelectItem>)}
+                        {filteredPatients?.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">No patients found</div>}
                       </SelectContent>
                     </Select>
                   </div>
