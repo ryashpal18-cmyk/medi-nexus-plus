@@ -578,7 +578,7 @@ export default function Billing() {
             <Button variant="outline" className="gap-2" onClick={exportToExcel}>
               <Download className="h-4 w-4" /> Excel Export
             </Button>
-            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setServices([{ name: "", amount: "" }]); setAmountPaid(""); setPaymentMode(""); } }}>
+            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setServices([{ name: "", amount: "" }]); setAmountPaid(""); setPaymentMode(""); setPatientSearch(""); } }}>
               <DialogTrigger asChild>
                 <Button className="gap-2"><Plus className="h-4 w-4" />New Bill</Button>
               </DialogTrigger>
