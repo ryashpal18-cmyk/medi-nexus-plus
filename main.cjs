@@ -20,7 +20,7 @@ function createWindow() {
     if (!fs.existsSync(dataFolder)) {
         try {
             fs.mkdirSync(dataFolder, { recursive: true });
-        } catch (e) { console.log("Folder error:", e); }
+        } catch (e) { console.log(e); }
     }
 }
 
